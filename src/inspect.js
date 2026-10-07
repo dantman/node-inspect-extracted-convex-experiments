@@ -1760,24 +1760,67 @@ function getDuplicateErrorFrameRanges(frames) {
 }
 
 function getStackString(ctx, error) {
+  console.log('[getStackString] start', {
+    errorType: typeof error,
+    errorToStringTag: ObjectPrototypeToString(error),
+    indentationLvl: ctx.indentationLvl,
+    seenDepth: ctx.seen.length,
+  });
   let stack;
   try {
     stack = error.stack;
+    const stackPreviewLines = typeof stack === 'string' ?
+      StringPrototypeSplit(stack, '\n').slice(0, 5) :
+      undefined;
+    console.log('[getStackString] read error.stack', {
+      stackType: typeof stack,
+      stackIsTruthy: !!stack,
+      stackLength: typeof stack === 'string' ? stack.length : undefined,
+      stackFirstLine: typeof stack === 'string' ? StringPrototypeSplit(stack, '\n', 1)[0] : undefined,
+      stackPreviewLines,
+      stackPreview: stackPreviewLines ? ArrayPrototypeJoin(stackPreviewLines, '\n') : undefined,
+    });
   } catch {
     // If stack is getter that throws, we ignore the error.
+    console.log('[getStackString] reading error.stack threw');
   }
   if (stack) {
+    console.log('[getStackString] stack is truthy', {
+      stackType: typeof stack,
+    });
     if (typeof stack === 'string') {
+      console.log('[getStackString] returning raw string stack');
       return stack;
     }
+    console.log('[getStackString] stack is non-string, formatting via formatValue', {
+      stackToStringTag: ObjectPrototypeToString(stack),
+      seenDepthBeforePush: ctx.seen.length,
+      indentationLvlBefore: ctx.indentationLvl,
+    });
     ctx.seen.push(error);
     ctx.indentationLvl += 4;
     const result = formatValue(ctx, stack);
     ctx.indentationLvl -= 4;
     ctx.seen.pop();
-    return `${ErrorPrototypeToString(error)}\n    ${result}`;
+    const errorString = ErrorPrototypeToString(error);
+    const combined = `${errorString}\n    ${result}`;
+    console.log('[getStackString] returning formatted non-string stack', {
+      errorString,
+      formattedStackValueType: typeof result,
+      formattedStackValueLength: typeof result === 'string' ? result.length : undefined,
+      combinedLength: combined.length,
+      combinedFirstLine: StringPrototypeSplit(combined, '\n', 1)[0],
+      seenDepthAfterPop: ctx.seen.length,
+      indentationLvlAfter: ctx.indentationLvl,
+    });
+    return combined;
   }
-  return ErrorPrototypeToString(error);
+  const fallback = ErrorPrototypeToString(error);
+  console.log('[getStackString] stack was falsy, returning ErrorPrototypeToString', {
+    fallbackType: typeof fallback,
+    fallback,
+  });
+  return fallback;
 }
 
 function getStackFrames(ctx, err, stack) {
@@ -1956,54 +1999,124 @@ function safeGetCWD() {
 }
 
 function formatError(err, constructor, tag, ctx, keys) {
+  const initialKeysSnapshot = ArrayPrototypeSlice(keys, 0);
+  console.log('[formatError] start', {
+    errType: typeof err,
+    errToStringTag: ObjectPrototypeToString(err),
+    constructorType: typeof constructor,
+    constructorName: constructor && constructor.name,
+    tag,
+    initialKeys: initialKeysSnapshot,
+    showHidden: ctx.showHidden,
+    colors: ctx.colors,
+    indentationLvl: ctx.indentationLvl,
+  });
+
   let message, name, stack;
   try {
     stack = getStackString(ctx, err);
+    console.log('[formatError] got stack from getStackString', {
+      stackType: typeof stack,
+      stackLength: typeof stack === 'string' ? stack.length : undefined,
+      stackFirstLine: typeof stack === 'string' ? StringPrototypeSplit(stack, '\n', 1)[0] : undefined,
+    });
   } catch {
+    console.log('[formatError] getStackString threw, falling back to Object.prototype.toString');
     return ObjectPrototypeToString(err);
   }
 
   let messageIsGetterThatThrows = false;
   try {
     message = err.message;
+    console.log('[formatError] read message', {
+      messageType: typeof message,
+      message,
+    });
   } catch {
     messageIsGetterThatThrows = true;
+    console.log('[formatError] reading message threw');
   }
   let nameIsGetterThatThrows = false;
   try {
     name = err.name;
+    console.log('[formatError] read name', {
+      nameType: typeof name,
+      name,
+    });
   } catch {
     nameIsGetterThatThrows = true;
+    console.log('[formatError] reading name threw');
   }
+  console.log('[formatError] getter status', {
+    messageIsGetterThatThrows,
+    nameIsGetterThatThrows,
+  });
 
   if (!ctx.showHidden && keys.length !== 0) {
+    console.log('[formatError] filtering keys because showHidden=false', {
+      keysBeforeFiltering: ArrayPrototypeSlice(keys, 0),
+    });
     const index = ArrayPrototypeIndexOf(keys, 'stack');
     if (index !== -1) {
       ArrayPrototypeSplice(keys, index, 1);
+      console.log('[formatError] removed "stack" from keys');
     }
 
     if (!messageIsGetterThatThrows) {
       const index = ArrayPrototypeIndexOf(keys, 'message');
+      const shouldHideMessage = index !== -1 &&
+        (typeof message !== 'string' || StringPrototypeIncludes(stack, message));
       // Only hide the property if it's a string and if it's part of the original stack
-      if (index !== -1 && (typeof message !== 'string' || StringPrototypeIncludes(stack, message))) {
+      if (shouldHideMessage) {
         ArrayPrototypeSplice(keys, index, 1);
+        console.log('[formatError] removed "message" from keys', {
+          messageType: typeof message,
+          messageIncludedInStack: typeof message === 'string' ? StringPrototypeIncludes(stack, message) : undefined,
+        });
+      } else {
+        console.log('[formatError] kept "message" in keys', {
+          messageIndex: index,
+          messageType: typeof message,
+          messageIncludedInStack: typeof message === 'string' ? StringPrototypeIncludes(stack, message) : undefined,
+        });
       }
     }
 
     if (!nameIsGetterThatThrows) {
       const index = ArrayPrototypeIndexOf(keys, 'name');
+      const shouldHideName = index !== -1 &&
+        (typeof name !== 'string' || StringPrototypeIncludes(stack, name));
       // Only hide the property if it's a string and if it's part of the original stack
-      if (index !== -1 && (typeof name !== 'string' || StringPrototypeIncludes(stack, name))) {
+      if (shouldHideName) {
         ArrayPrototypeSplice(keys, index, 1);
+        console.log('[formatError] removed "name" from keys', {
+          nameType: typeof name,
+          nameIncludedInStack: typeof name === 'string' ? StringPrototypeIncludes(stack, name) : undefined,
+        });
+      } else {
+        console.log('[formatError] kept "name" in keys', {
+          nameIndex: index,
+          nameType: typeof name,
+          nameIncludedInStack: typeof name === 'string' ? StringPrototypeIncludes(stack, name) : undefined,
+        });
       }
     }
+    console.log('[formatError] keys after filtering', {
+      keysAfterFiltering: ArrayPrototypeSlice(keys, 0),
+    });
   }
   // hildjj: Support node 14.
+  const nameBeforeDefaulting = name;
   name = (name == null) ? 'Error' : name;
+  console.log('[formatError] normalized name', {
+    nameBeforeDefaulting,
+    nameAfterDefaulting: name,
+  });
 
   if (ObjectPrototypeHasOwnProperty(err, 'cause') &&
       (keys.length === 0 || !ArrayPrototypeIncludes(keys, 'cause'))) {
     ArrayPrototypePush(keys, 'cause');
+    console.log('[formatError] added "cause" to keys');
   }
 
   // Print errors aggregated into AggregateError
@@ -2012,33 +2125,72 @@ function formatError(err, constructor, tag, ctx, keys) {
     if (ArrayIsArray(errors) && ObjectPrototypeHasOwnProperty(err, 'errors') &&
       (keys.length === 0 || !ArrayPrototypeIncludes(keys, 'errors'))) {
       ArrayPrototypePush(keys, 'errors');
+      console.log('[formatError] added "errors" to keys', {
+        errorsLength: errors.length,
+      });
+    } else {
+      console.log('[formatError] did not add "errors" to keys', {
+        errorsType: typeof errors,
+        errorsIsArray: ArrayIsArray(errors),
+        hasOwnErrors: ObjectPrototypeHasOwnProperty(err, 'errors'),
+        alreadyInKeys: ArrayPrototypeIncludes(keys, 'errors'),
+      });
     }
   } catch {
     // If errors is a getter that throws, we ignore the error.
+    console.log('[formatError] reading errors threw');
   }
+  console.log('[formatError] keys before improveStack', {
+    keys: ArrayPrototypeSlice(keys, 0),
+  });
 
   stack = improveStack(stack, constructor, name, tag);
+  console.log('[formatError] after improveStack', {
+    stackType: typeof stack,
+    stackLength: typeof stack === 'string' ? stack.length : undefined,
+    stackFirstLine: typeof stack === 'string' ? StringPrototypeSplit(stack, '\n', 1)[0] : undefined,
+  });
 
   // Ignore the error message if it's contained in the stack.
   let pos = (message && StringPrototypeIndexOf(stack, message)) || -1;
   if (pos !== -1)
     pos += message.length;
+  console.log('[formatError] message lookup in stack', {
+    messageType: typeof message,
+    message,
+    posAfterAdjustment: pos,
+  });
   // Wrap the error in brackets in case it has no stack trace.
   const stackStart = StringPrototypeIndexOf(stack, '\n    at', pos);
+  console.log('[formatError] stack frame start lookup', { stackStart });
   if (stackStart === -1) {
     stack = `[${stack}]`;
+    console.log('[formatError] no stack frames found, wrapped stack in brackets');
   } else {
     let newStack = StringPrototypeSlice(stack, 0, stackStart);
     const stackFramePart = StringPrototypeSlice(stack, stackStart + 1);
     const lines = getStackFrames(ctx, err, stackFramePart);
+    console.log('[formatError] parsed stack frames', {
+      headerLength: newStack.length,
+      stackFramePartLength: stackFramePart.length,
+      framesCount: lines.length,
+      colors: ctx.colors,
+    });
     if (ctx.colors) {
       // Highlight userland code and node modules.
       const workingDirectory = safeGetCWD();
       let esmWorkingDirectory;
+      console.log('[formatError] color stack rendering setup', {
+        workingDirectory,
+      });
       for (let line of lines) {
         const core = RegExpPrototypeExec(coreModuleRegExp, line);
         if (core !== null && BuiltinModule.exists(core[1])) {
           newStack += `\n${ctx.stylize(line, 'undefined')}`;
+          console.log('[formatError] styled core module line', {
+            line,
+            coreModule: core[1],
+          });
         } else {
           newStack += '\n';
 
@@ -2054,18 +2206,33 @@ function formatError(err, constructor, tag, ctx, keys) {
           }
 
           newStack += line;
+          console.log('[formatError] styled non-core line', { line });
         }
       }
     } else {
       newStack += `\n${ArrayPrototypeJoin(lines, '\n')}`;
+      console.log('[formatError] rendered stack frames without colors');
     }
     stack = newStack;
+    console.log('[formatError] rebuilt stack with frames', {
+      rebuiltStackLength: stack.length,
+      rebuiltStackFirstLine: StringPrototypeSplit(stack, '\n', 1)[0],
+    });
   }
   // The message and the stack have to be indented as well!
   if (ctx.indentationLvl !== 0) {
     const indentation = StringPrototypeRepeat(' ', ctx.indentationLvl);
     stack = StringPrototypeReplaceAll(stack, '\n', `\n${indentation}`);
+    console.log('[formatError] applied indentation', {
+      indentationLvl: ctx.indentationLvl,
+      indentationLength: indentation.length,
+    });
   }
+  console.log('[formatError] returning stack', {
+    finalStackLength: stack.length,
+    finalStackFirstLine: StringPrototypeSplit(stack, '\n', 1)[0],
+    finalKeys: ArrayPrototypeSlice(keys, 0),
+  });
   return stack;
 }
 

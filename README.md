@@ -1,3 +1,19 @@
+# Experiments with node-inspect-extracted in the Convex runtime
+
+This branch is a fork of `node-inspect-extracted` with log lines added to it to inspect the difference in results given in Node.js vs the Convex runtime. As you can see in [dantman/convex-node-inspect-extracted-test](https://github.com/dantman/convex-node-inspect-extracted-test) when an error is inspected by this library in Node.js it prints a different result than it does in the Convex runtime.
+
+The main human written additions in this branch are [convex/test.js](./convex/test.js) where a Convex query was added and [test.js](./test.js) where a simple console log is used to inspect Node.js' behaviour. Also a [convex/package.json](convex/package.json) because Convex expects ESM exports not CommonJS exports. And this README.md was modified by me. [src/inspect.js](./src/inspect.js) has been modified by GitHub Copilot / GPT-5.3-Codex to insert console.log lines printing the state of `formatError` and `getStackString` as they execute. The remaining changes are additions made by `pnpm add convex`, `pnpm approve-builds`, `pnpm convex dev`, `pnpm convex ai-files disable` i.e. the boilerplate to setup Convex.
+
+To test this out yourself `pnpm install` to get the new packages, `pnpm convex dev --once` to go through the setup process to deploy to Convex, and `pnpm convex dashboard` to open the dashboard (it will not open from the default Devcontiner so alt/ctrl+click the link in your terminal).
+
+Run `node test.js` to see what inspecting an Error instance looks like from Node.js.
+
+From the Convex dashboard click the "fn" tab in the lower right, select the "test:test" query in the "app" component (it will probably already be selected since it's the only user supplied Convex function), and look at the result in the panel to the right to see what is logged to Convex as well as the return result of the inspect function at the very bottom of the panel.
+
+The **TL;DR** if you don't want to run this yourself is it appears that when `getStackString` reads `error.stack` in Node.js it is a string that starts with `"Error: This is a test"` and continues with 4 stack lines starting with `'    at Object.<anonymous> (/workspaces/node-inspect-extracted-convex-experiments/test.js:4:21)'` down to `'    at Module.load (node:internal/modules/cjs/loader:1651:32)'`; but when it reads `error.stack` in the Convex runtime it is a string that only contains the "    at handler (../convex/test.js:9:1)" stack.
+
+----
+
 # node-inspect-extracted
 
 This library provides an as-faithful-as-possible implementation of Node.js's
